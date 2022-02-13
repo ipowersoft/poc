@@ -99,7 +99,7 @@ global_deaths <- read.csv(urls[2])
 ```
 
 # 1. Covid Cases from Global/US Raw data
-```{r echo=FALSE, include=FALSE}
+```{r}
 
 # Sumamry global covid-19 cases
 #summary(global_cases)
@@ -164,6 +164,9 @@ global <- global_cases %>%
 global <- global %>%
    rename(Country_Region = `Country.Region`,
            Province_State = `Province.State`)
+```
+
+```{r echo=FALSE, include=FALSE}
 #global
 #summary(global)
 #data.table(global)
