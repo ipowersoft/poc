@@ -1,0 +1,467 @@
+---
+title: "Covid-19 Data - Analyze / Visualize / Model "
+author: "Kothandaraman Sikamani"
+date: "12/02/2022"
+output:
+  pdf_document: default
+  html_document: default
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r echo=FALSE, include=FALSE}
+
+# Please Install all these packages as needed to run rmd and to create pdf document.
+# install.packages("tidyr")
+# install.packages("dplyr")
+# install.packages("ggiraph") 
+# install.packages("ggmap") 
+# install.packages("tinytex")
+# tinytex::install_tinytex()
+
+library(tidyverse)
+library(ggplot2)
+library(ggrepel)
+library(gggenes)
+library("data.table")
+library("lubridate")
+library("stringr")
+library(lubridate)
+library(ggiraph)
+library(ggmap) 
+
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Covid 19 Global/US data analyzing and modeling
+# Purpose
+  In this document, I will be explaining/focusing on Analytics, Visualization, and Model building using Covid-19 Data Dataset from John Hopkins University. At a high level, I will be addressing the following topics.
+
+1. **Covid Cases from Global/US.**
+    + Summarizing global covid-19 cases 
+    + Summarizing global covid-19 deaths
+    + Summarizing US covid-19 cases 
+    + Summarizing US covid-19 deaths
+2. **Tidying and Transforming Data**
+    + Summarizing US covid-19 cases 
+    + Summarizing US covid-19 deaths
+3. **Visualization and Analysis for Covid-19 cases from Global/US.**
+    + Visualization of state wise cases/deaths using plots.
+    + Analyzing state wise data
+    + Analyzing state wise maximum cases and deaths 
+4. **Model.**
+    + Data preparation for Model
+    + LM model building
+    + Summarizing and analyzing model.
+    + Understanding model predictions and plot the model prediction visually.
+5. **Bias.**
+    + Describe if any bias situations that can help improve model performance.
+
+## Data Source
+  I am using the data source from John Hopkins github for US/Global cases/deaths as csv format 
+  <https://github.com/CSSEGISandData/COVID-19/tree/master/csse_covid_19_data/csse_covid_19_time_series/>   
+
+# From file URL's 
+```{r}
+
+url_in <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/"
+
+file_names <- c("time_series_covid19_confirmed_global.csv",
+                "time_series_covid19_deaths_global.csv",
+                "time_series_covid19_confirmed_US.csv",
+                "time_series_covid19_deaths_US.csv"
+                )
+
+urls <- str_c(url_in, file_names)
+
+#urls
+
+```
+## Import the global data
+
+I will read the .csv file using read.csv()
+
+```{r shoot_historic}
+
+# Reading global cases and deaths raw csv data
+
+global_cases <- read.csv(urls[1])
+global_deaths <- read.csv(urls[2])
+
+#global_cases.
+#head(global_cases, 5)
+#global_deaths
+#head(global_deaths, 5)
+
+```
+
+# 1. Covid Cases from Global/US Raw data
+```{r echo=FALSE, include=FALSE}
+
+# Sumamry global covid-19 cases
+#summary(global_cases)
+
+# Sumamry global covid-19 deaths
+#summary(global_deaths)
+
+#data.table(global_cases)
+#data.table(global_deaths)
+
+global_cases <- global_cases %>%
+  pivot_longer(cols = -c('Province.State',
+                         'Country.Region', Lat, Long),
+               names_to = "date",
+               values_to = "cases") %>%
+  select(-c(Lat, Long))
+
+global_deaths <- global_deaths %>%
+  pivot_longer(cols = -c('Province.State',
+                         'Country.Region', Lat, Long),
+               names_to = "date",
+               values_to = "deaths") %>%
+  select(-c(Lat, Long))
+
+# Sumamry global covid-19 cases
+summary(global_cases)
+
+# Sumamry global covid-19 deaths
+summary(global_deaths)
+
+#data.table(global_cases)
+#data.table(global_deaths)
+
+#data.table(global_cases)
+#data.table(global_deaths)
+
+
+
+# 1.1 Data Cleanup
+
+
+
+#global_cases <- global_cases[1:100, ]
+#global_deaths <- global_deaths[1:100, ]
+
+# Cleanup Data - Date column
+global_cases$date <- gsub("\\.", "-", global_cases$date)
+global_cases$date <- gsub("\\X", "", global_cases$date)
+global_deaths$date <- gsub("\\.", "-", global_deaths$date)
+global_deaths$date <- gsub("\\X", "", global_deaths$date)
+
+global_cases <- global_cases %>%
+   mutate(date = mdy(date))
+global_deaths <- global_deaths %>%
+   mutate(date = mdy(date))
+
+# Join global cases with deaths 
+global <- global_cases %>%
+   full_join(global_deaths)
+
+# Column rename
+global <- global %>%
+   rename(Country_Region = `Country.Region`,
+           Province_State = `Province.State`)
+#global
+#summary(global)
+#data.table(global)
+
+#global_cases <- global_cases %>%  filter(Province_State == 'Alabama')
+#global_deaths <- global_deaths %>%  filter(Province_State == 'Alabama')
+#global <- global %>% mutate(deaths = ifelse(is.na(deaths), 0, deaths))
+
+# Filter by 0 cases and deaths
+
+# global <- global %>% filter(!is.na(cases))
+# global <- global %>% filter(!is.na(deaths))
+# global %>% filter(cases != NA)
+# global %>% drop_na(cases)
+# global %>% filter_all(any_vars(! is.na(.)))
+
+#global <- global %>% filter(cases > 0)
+#global <- global %>% filter(deaths > 0)
+
+#global %>% filter(cases > 70000000)
+
+#global
+
+```
+
+# 2. Tidying and Transforming Data:
+
+```{r}
+
+## Import the US data
+# I will read the .csv file using read.csv()
+
+
+us_cases <- read.csv(urls[3])
+us_deaths <- read.csv(urls[4])
+
+#us_cases
+#us_deaths
+#summary(us_cases)
+#summary(us_deaths)
+#data.table(us_cases)
+#data.table(us_deaths)
+
+# Data Cleaup
+ us_cases <- us_cases %>%
+   pivot_longer(cols = -c('Province_State',
+                          'Country_Region', UID, iso2, iso3, code3, FIPS,
+                          Combined_Key, Admin2, Lat, Long_),
+                names_to = "date",
+                values_to = "cases") %>%
+   select(-c(UID, iso2, iso3, code3, FIPS, Lat, Long_))
+ 
+ us_deaths <- us_deaths %>%
+   pivot_longer(cols = -c('Province_State',
+                          'Country_Region', UID, iso2, iso3, code3, FIPS, 
+                          Combined_Key, Population, Admin2, Lat, Long_),
+                names_to = "date",
+                values_to = "deaths") %>%
+   select(-c(UID, iso2, iso3, code3, FIPS, Lat, Long_))
+
+us_cases$date <- gsub("\\.", "-", us_cases$date)
+us_cases$date <- gsub("\\X", "", us_cases$date)
+us_deaths$date <- gsub("\\.", "-", us_deaths$date)
+us_deaths$date <- gsub("\\X", "", us_deaths$date)
+
+us_cases <- us_cases %>%
+   mutate(date = mdy(date))
+us_deaths <- us_deaths %>%
+   mutate(date = mdy(date))
+
+us_cases
+us_deaths
+# Summarizing US cases:
+summary(us_cases)
+# Summarizing US Deaths:
+summary(us_deaths)
+# data.table(us_cases)
+# data.table(us_deaths)
+
+# Join us_cases data with us_deaths dataset
+
+US <- us_cases %>%
+   full_join(us_deaths)
+
+# Create Combined_Key column in global dataframe using Province_State, Country_Region)
+# Column rename
+global <- global %>%
+   unite("Combined_Key",
+           c(Province_State, Country_Region),
+           sep = ", ",
+           na.rm = TRUE,
+           remove = FALSE)
+
+# Import Lookup data for population details and additional features
+
+uid_lookup_url <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/UID_ISO_FIPS_LookUp_Table.csv"
+
+uid <- read_csv(uid_lookup_url)
+
+#uid <- read_csv(uid_lookup_url) %>%
+#   select(-c(Lat, Long_, Combined_Key, code3, iso2, iso3, Admin2))
+
+spec(uid)
+
+# Join global data with UID dataset
+
+global <- global %>%
+   left_join(uid, by = c("Province_State","Country_Region")) %>%
+   select(-c(UID, FIPS))
+
+global <- global %>%
+   select(Province_State, Country_Region, date, cases, deaths, 
+          Population, Combined_Key.x)
+
+global <- global %>%
+   rename(Combined_Key = `Combined_Key.x`)
+
+#global
+```
+
+# 3. Visualization and Analysis for Covid cases from Global/US
+
+```{r}
+
+US_by_state <- US %>%
+   group_by(Province_State, Country_Region, date) %>%
+   summarize(cases = sum(cases), deaths = sum(deaths),
+           Population = sum(Population)) %>%
+   mutate(deaths_per_mill = deaths *1000000 / Population) %>%
+   select(Province_State, Country_Region, date,
+           cases, deaths, deaths_per_mill, Population) %>%
+   ungroup()
+
+#US_by_state
+summary(US_by_state)
+
+US_totals <- US_by_state %>%
+   group_by(Country_Region, date) %>%
+   summarize(cases= sum(cases), deaths = sum(deaths), 
+             Population = sum(Population)) %>%
+   mutate(deaths_per_mill = deaths *1000000 / Population) %>%
+   select(Country_Region, date, cases, deaths, deaths_per_mill, Population) %>%
+   ungroup()
+
+summary(US_totals)
+
+#US_totals
+
+summary(US_by_state)
+tail(US_totals)
+
+US_totals %>%
+   filter(cases > 0) %>%
+   ggplot(aes(x = date, y = cases)) +
+   geom_line(aes(color = "cases")) +
+   geom_point(aes(color = "cases")) +
+   geom_line(aes(y = deaths, color = "deaths")) +
+   geom_point(aes(y = deaths, color = "deaths")) +
+   scale_y_log10() +
+   theme(legend.position="bottom",
+           axis.text.x = element_text(angle = 90)) +
+   labs(title = "COVID19 in US", y = NULL)
+
+```
+
+**Top 5 cases count happened by date wise / Maximum cases in a day :**
+
+```{r}
+
+US_by_state <- US_by_state %>%
+   mutate(new_cases = cases - lag(cases),
+           new_deaths = deaths - lag(deaths))
+
+US_totals <- US_totals %>%
+   mutate(new_cases = cases - lag(cases),
+           new_deaths = deaths - lag(deaths))
+
+tail(US_totals)
+
+tail(US_totals %>% select(new_cases, new_deaths, everything()))
+
+state <- "NEW YORK"
+
+# sort dataframe by column in r
+# select top N results
+
+#spec(US_totals)
+#US_totals <- US_totals %>% filter(!is.na(new_cases))
+#spec(US_totals)
+
+US_totals_By_Date_TOP_5_Cases_Count <- US_totals[order(-US_totals$new_cases),][1:5,]
+
+US_totals_By_Date_TOP_5_Cases_Count
+
+US_totals_By_Date_TOP_Cases <- US_totals_By_Date_TOP_5_Cases_Count[1,]
+
+#US_totals_By_Date_TOP_Cases
+
+# Maximum cases in a day 
+max(US_totals_By_Date_TOP_Cases$new_cases) 
+
+# Maximum cases day - date  
+max(US_totals_By_Date_TOP_Cases$date) 
+
+```
+## Analizing Data:
+
+```{r}
+
+US_totals %>%
+   filter(cases > 0) %>%
+   ggplot(aes(x = date, y = cases)) +
+   geom_line(aes(color = "cases")) +
+   geom_point(aes(color = "cases")) +
+   geom_line(aes(y = deaths, color = "deaths")) +
+   geom_point(aes(y = deaths, color = "deaths")) +
+   scale_y_log10() +
+   theme(legend.position="bottom",
+           axis.text.x = element_text(angle = 90)) +
+   labs(title = "COVID19 in US", y = NULL)
+
+US_state_totals <- US_by_state %>%
+   group_by(Province_State) %>%
+   summarize(deaths = max(deaths), cases = max(cases),
+               population = max(Population),
+               cases_per_thou = 1000* cases / population,
+               deaths_per_thou = 1000 * deaths / population) %>%
+   filter(cases > 0, population > 0)
+
+US_state_totals %>%
+   slice_min(deaths_per_thou, n = 10)
+
+US_state_totals <- US_state_totals %>%
+  slice_min(deaths_per_thou, n = 10) %>%
+  select(deaths_per_thou, cases_per_thou, everything())
+
+US_state_totals
+summary(US_state_totals)
+
+```
+# 4. Model Building - Linear Regression model
+
+```{r}
+
+mod <- lm(deaths_per_thou ~ cases_per_thou, data = US_state_totals)
+
+# Sumamry - Model
+
+summary(mod)
+
+US_state_totals %>% slice_min(cases_per_thou)
+
+US_state_totals %>% slice_max(cases_per_thou)
+
+x_grid <- seq(1, 151)
+
+new_df <- tibble(cases_per_thou = x_grid)
+
+# Create Prediction column from model
+
+US_tot_w_pred <- US_state_totals %>%
+  mutate(pred = predict(mod))
+
+US_tot_w_pred
+summary(US_tot_w_pred)
+
+# global_cases <- global_cases %>%
+#    mutate(date = mdy(date))
+
+# Model plot - Visualization
+
+US_tot_w_pred %>% ggplot() +
+ geom_point(aes(x = cases_per_thou, y = deaths_per_thou), color = "blue") +
+ geom_point(aes(x = cases_per_thou, y = pred), color = "red")
+
+```
+
+## Model Performance and Coefficients: -- a and b values vary   
+  From the model performance above, we can see the values of the intercept (“a” value) and the slope (“b” value) for the year. These “a” and “b” values plot a line between all the points of the data. So in this case,  
+If there is a cases_per_thou that is 250 , a is 0.270799 and b is 0.004362, the model predicts (on average) that its death count is around 0.270799 + ((0.004362)) * 250) = 1.36 = ~1.  
+It might be possible to get better model performance by considering other features like infectious disease spread model, non-pharmaceutical interventions, authority policies, vaccine, health-related info, and lifestyle information.
+
+# 5. Bias:
+The above model currently used only samples of the time-series data to predict the future number of cases. A potential future direction to improve the estimation accuracy is to incorporate constraints such as infectious disease spread model, non-pharmaceutical interventions, authority policies, vaccine, health-related info, and lifestyle information. There is a possibility of some types of biases in the COVID-19 dataset. Then we started looking at deaths per 1000 or deaths per million.  
+It's different depending on the variables that we are measuring. By reducing noise and adding more features it's highly possible to predict better test results close to training data and the model can eventually perform better. With that said, it is important to monitor the data preparation processes closely to make sure the datasets are as bias-free as possible before they are used in the training phase.    
+  
+**Selection Bias:** This seems like not an issue as this data is from John Hopkins github.  
+
+**Overfitting and Underfitting:** When a model gets trained with large amounts of data, it also starts learning from the noise and inaccurate data entries in the dataset. Consequently, the model does not categorize the data correctly, because of too many details and noise. In this data set, lat lang or many other features can cause noise but can be reduced.  
+
+**Exclusion Bias:** It's possible excluding some features can cause higher bias and this can be reduced including some features that can reduce bias like climate and economic situations and political situations, and inflation and seasons can be included to get more accurate model performance.
+
+# Conclusion:
+To conclude, I have done the Visualizations, Model, and Bias from the above. The answers are as follows:  
+1. Summarized Global/US cases and deaths separately.  
+2. Visualized state-wise cases/deaths using plots, Analyzed state-wise data, Analyzed state-wise maximum cases and deaths.  
+3. Prepared data for the Model  
+    a. LM model building  
+    b. Summarized and analyzed model.  
+    c. Understanding model predictions and plotting the model prediction visually.
+

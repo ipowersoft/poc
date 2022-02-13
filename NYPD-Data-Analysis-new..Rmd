@@ -1,0 +1,468 @@
+---
+title: "NYPD shooting incident data - Analyze / Visualize / Model "
+author: "Kothandaraman Sikamani"
+date: "12/02/2022"
+output:
+  pdf_document: default
+  html_document: default
+always_allow_html: true
+---
+
+```{r echo=FALSE, include=FALSE}
+
+# install.packages("tidyr")
+# install.packages("dplyr")
+# install.packages("ggiraph") 
+# install.packages("ggmap") 
+
+library(tidyverse)
+library(ggplot2)
+library(ggrepel)
+library(gggenes)
+library("data.table")
+library("lubridate")
+library("stringr")
+library(lubridate)
+library(ggiraph)
+library(ggmap) 
+
+
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# NYPD Shooting Incident Data (Historic) Analyse, Visualize, and prepare model.
+## Purpose
+
+I will be focusing on Data Visualization, Model of NYPD Shooting Incident in this project as follows:  
+
+1. **NYPD Shooting Incidents.**
+    + Data Source
+    + Importing the data
+    + Summarizing NYPD Shooting Incident historic raw data
+2. **Tidying and Transforming Data.**
+    + Tidy data and Transform
+3. **Visualization and Analysis of NYPD Shooting Incidents data.**
+    + Visualizing NYPD Shoot Incidents and Deaths
+      + Visualizing NYPD Shoot Incidents by Jurisdiction - Pie/Coxcomb/Bar chart
+      + Visualizing NYPD Shoot Incidents by Yearly - Bar/Scatter/Pie/Coxcomb
+      + Visualizing NYPD Death by Yearly - Bar/Scatter/Pie/Coxcomb/Multiple-Pie/Interactive chart
+    + Top 5 Incidents happened in a day / Maximum Incidents in a day
+    + Top 5 Deaths happened in a day / Maximum Deaths in a day
+    + Maximum shooting incidents by yearly
+    + Maximum death incidents by yearly
+4. **Model.**
+    + Jurisdiction yearly frequency of Model
+5. **Bias.**
+    + Explained about bias details for better model performance and model prediction
+
+# 1. NYPD Shooting Incidents:
+## 1.1 Data Source
+I am using the data source from NYPD Shooting Incident Data (Historic), Taken historic data from 2006 to 2020. This data set is in .csv format. <https://catalog.data.gov/dataset/nypd-shooting-incident-data-historic>  
+
+## 1.2 Import the data
+I will read the .csv file using read.csv().
+```{r shoot_historic}
+shoot_historic <- read.csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv")
+```
+
+## 1.2.1 Finding Total Incidents
+
+```{r}
+
+paste("The total number of Incidents :", nrow(shoot_historic))
+
+```
+
+## 1.3 Summarizing NYPD Shooting Incident historic raw data
+```{r}
+summary(shoot_historic)
+```
+
+```{r}
+#head(shoot_historic , 2)
+#data.table(shoot_historic)
+#spec(shoot_historic)
+```
+
+# 2. Tidying and Transforming Data
+
+```{r}
+## Adding INCIDENT_COUNT  and DEATH_COUNT(based on STATISTICAL_MURDER_FLAG ) 
+
+shoot_historic <- shoot_historic %>%
+  mutate(OCCUR_DATE = mdy(OCCUR_DATE)) %>%
+  mutate(INCIDENT_COUNT = 1 ) %>%
+  mutate(
+     DEATH_COUNT = case_when(
+          STATISTICAL_MURDER_FLAG == "true" ~ 1,
+          STATISTICAL_MURDER_FLAG == "false" ~ 0
+     )) %>%
+  select(-c(INCIDENT_KEY, OCCUR_TIME, LOCATION_DESC, X_COORD_CD, Y_COORD_CD,
+            Latitude, Longitude, Lon_Lat))
+
+shoot_historic_by_JURISDICTION_CODE <- shoot_historic %>% 
+  group_by (JURISDICTION_CODE)  %>%  
+  summarize( INCIDENT_COUNT = sum(INCIDENT_COUNT) ) %>% 
+  select (JURISDICTION_CODE, INCIDENT_COUNT )
+
+shoot_historic_by_JURISDICTION_CODE
+
+# Cleaning NA data.
+shoot_historic_by_JURISDICTION_CODE <- shoot_historic_by_JURISDICTION_CODE %>% filter(!is.na(JURISDICTION_CODE))
+
+#After removing NA data.
+shoot_historic_by_JURISDICTION_CODE
+
+shoot_historic_By_Date <- shoot_historic %>% 
+  group_by ( OCCUR_DATE )  %>%  
+  summarize( INCIDENT_COUNT = sum(INCIDENT_COUNT), 
+             DEATH_COUNT = sum(DEATH_COUNT)) %>% 
+  select (OCCUR_DATE , INCIDENT_COUNT , DEATH_COUNT)
+
+shoot_historic_By_Date
+
+shoot_historic_By_Date_Year <- shoot_historic_By_Date %>%
+   mutate(OCCUR_DATE_YEAR = year(OCCUR_DATE))  %>%
+   group_by(OCCUR_DATE_YEAR)  %>%
+   summarize(INCIDENT_COUNT = sum(INCIDENT_COUNT),
+             DEATH_COUNT = sum(DEATH_COUNT) ) %>%
+   ungroup()
+
+shoot_historic_By_Date_Year
+
+
+shoot_historic_by_VIC_RACE_YEAR <- shoot_historic %>%
+   mutate(OCCUR_DATE_YEAR = year(OCCUR_DATE))  %>% 
+  group_by (VIC_RACE, OCCUR_DATE_YEAR)  %>%  
+  summarize( INCIDENT_COUNT = sum(INCIDENT_COUNT), 
+             DEATH_COUNT = sum(DEATH_COUNT) ) %>% 
+  select (VIC_RACE, OCCUR_DATE_YEAR, INCIDENT_COUNT, DEATH_COUNT)
+
+shoot_historic_by_VIC_RACE_YEAR
+
+# Add tool tip column for plots
+shoot_historic_by_VIC_RACE_YEAR <- shoot_historic_by_VIC_RACE_YEAR %>%
+   unite("TOOL_TIP_COLS",
+           c(OCCUR_DATE_YEAR, VIC_RACE, INCIDENT_COUNT, DEATH_COUNT),
+           sep = ", ",
+           na.rm = TRUE,
+           remove = FALSE)
+
+
+```
+
+## 3. Visualization and Analysis of NYPD Shooting Incidents Data:
+## 3.1 Visualizing NYPD Shoot Incidents by Jurisdiction: Pie chart
+
+```{r}
+
+# Pie chart
+ggplot(shoot_historic_by_JURISDICTION_CODE, aes(x="", y=INCIDENT_COUNT, fill=factor(JURISDICTION_CODE) )) +geom_bar(width = 1, stat = "identity") + 
+  coord_polar("y", start=0) +theme_void() + 
+  labs(title = "Pie - Incident by Jurisdiction" )
+
+```
+
+## 3.2 Visualizing NYPD Shoot Incidents by Jurisdiction: Coxcomb chart
+
+```{r}
+
+# Coxcomb chart
+ggplot(shoot_historic_by_JURISDICTION_CODE, 
+       aes(factor(JURISDICTION_CODE),INCIDENT_COUNT, 
+           fill=factor(JURISDICTION_CODE))) + 
+  geom_bar(stat="identity") + 
+  coord_polar("x", start=0,direction = -1)+
+  xlab("Different JURISDICTION_CODE") +
+  ylab("# of Incidents") + labs(title = "Coxcomb - Incident by Jurisdiction" )
+
+```
+
+## 3.2.1 Visualizing NYPD Shoot Incidents by Jurisdiction: Bar chart
+
+```{r}
+
+# Bar chart
+ggplot(shoot_historic_by_JURISDICTION_CODE, 
+       aes(x=JURISDICTION_CODE, y=INCIDENT_COUNT, 
+           fill=factor(JURISDICTION_CODE))) + geom_bar(stat="identity") + geom_text_repel(data=shoot_historic_by_JURISDICTION_CODE, 
+                                                                                          aes(label=factor(JURISDICTION_CODE))) +  
+  labs(title = "Bar - Incident by Jurisdiction" )
+
+```
+
+## 3.3 Visualizing NYPD Shoot Incidents by Date: Bar chart
+
+```{r}
+
+# Bar - Cluttered
+ggplot(shoot_historic_By_Date, 
+       aes(x=OCCUR_DATE, y=INCIDENT_COUNT, fill=OCCUR_DATE )) + 
+  geom_bar(stat="identity") + 
+  geom_text_repel(data=shoot_historic_By_Date, aes(label=OCCUR_DATE)) +  
+  labs(title = "Bar - Incident by OCCUR_DATE" )
+
+```
+
+## 3.4 Visualizing NYPD Shoot Incidents by Yearly: Bar/Scatter/Pie/Coxcomb
+
+```{r}
+
+# Bar Graph
+ggplot(data = shoot_historic_By_Date_Year, 
+       aes(x = factor(OCCUR_DATE_YEAR), y = INCIDENT_COUNT)) + 
+  geom_bar(stat="identity") + theme_classic() + 
+labs(title = "Bar Graph - Incident Year Vs Incident Count",
+x = "Incident Year",
+y = "Incident Count",
+caption = "Source: NYPD Shooting Incident Dataset")
+
+#Scatterplot
+ggplot(data = shoot_historic_By_Date_Year, 
+       aes(x = factor(OCCUR_DATE_YEAR), y = INCIDENT_COUNT)) + 
+  geom_point(aes(color=INCIDENT_COUNT )) + theme_classic() + 
+labs(title = "Scatterplot - Incident Year Vs Incident Count",
+x = "Incident Year",
+y = "Incident Count",
+caption = "Source: NYPD Shooting Incident Dataset")
+
+# Pie chart
+ggplot(shoot_historic_By_Date_Year, 
+       aes(x="", y=INCIDENT_COUNT, fill=factor(OCCUR_DATE_YEAR))) +
+  geom_bar(width = 1, stat = "identity") + 
+  coord_polar("y", start=0) +theme_void() + 
+  labs(title = "Pie - Shooting Incident Count by Year" )
+
+# Coxcomb chart
+ggplot(shoot_historic_By_Date_Year, aes(factor(OCCUR_DATE_YEAR),INCIDENT_COUNT, fill=factor(OCCUR_DATE_YEAR))) + 
+  geom_bar(stat="identity") + 
+  coord_polar("x", start=0,direction = -1)+
+  xlab("Incident Year") +
+  ylab("# of Incidents") + labs(title = "Coxcomb - Incident by Year" )
+
+```
+
+## 3.5 Visualizing NYPD Shoot Incidents by Yearly Death count: Bar/Scatter/Pie /Coxcomb/Multiple Pie Chart/Interactive chart
+
+```{r}
+
+# Bar chart
+ggplot(data = shoot_historic_By_Date_Year, 
+       aes(x = factor(OCCUR_DATE_YEAR), y = DEATH_COUNT)) + 
+  geom_bar(stat="identity") + theme_classic() + 
+labs(title = "Bar Graph - Incident Year Vs Death Count",
+x = "Incident Year",
+y = "Death Count",
+caption = "Source: NYPD Shooting Incident Dataset")
+
+# Scatetr Plot
+ggplot(data = shoot_historic_By_Date_Year, 
+       aes(x = factor(OCCUR_DATE_YEAR), y = DEATH_COUNT)) + 
+  geom_point(aes(color=DEATH_COUNT )) + theme_classic() + 
+labs(title = "Scatterplot - Incident Year Vs Death Count",
+x = "Incident Year",
+y = "Death Count",
+caption = "Source: NYPD Shooting Incident Dataset")
+
+# Pie chart
+ggplot(shoot_historic_By_Date_Year, 
+       aes(x="", y=DEATH_COUNT, fill=factor(OCCUR_DATE_YEAR))) +
+  geom_bar(width = 1, stat = "identity") + 
+  coord_polar("y", start=0) +theme_void() + labs(title = "Pie - Death by Year" )
+
+# Coxcomb chart
+ggplot(shoot_historic_By_Date_Year, aes(factor(DEATH_COUNT),DEATH_COUNT, fill=factor(OCCUR_DATE_YEAR))) + 
+  geom_bar(stat="identity") + 
+  coord_polar("x", start=0,direction = -1)+
+  xlab("Incident Year") +
+  ylab("# of Deaths") + labs(title = "Death by Year" )
+
+# Multiple Pie Chart  - Exploring Multiple for Practise
+ggplot(data=shoot_historic_By_Date_Year, 
+       aes(x=" ", y=DEATH_COUNT, group=factor(DEATH_COUNT), 
+           colour=factor(DEATH_COUNT), fill=factor(DEATH_COUNT))) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start=0) +
+  facet_grid(.~ factor(OCCUR_DATE_YEAR)) +theme_void() + 
+  labs(title = "Multiple Pie Chart- Year and Death Count" )
+
+shoot_historic_by_VIC_RACE_YEAR
+
+# Pie chart
+ggplot(shoot_historic_by_VIC_RACE_YEAR, 
+       aes(x="", y=DEATH_COUNT, fill=factor(VIC_RACE) )) +
+  geom_bar(width = 1, stat = "identity") + 
+  coord_polar("y", start=0) +theme_void() + labs(title = "Pie - Death by Year" )
+
+# Multiple Pie Chart - DeathCount by Vic Race and Year - Exploring Multiple for Practise
+ggplot(data=shoot_historic_by_VIC_RACE_YEAR, 
+       aes(x=" ", y=DEATH_COUNT, group=factor(DEATH_COUNT), 
+           colour=factor(VIC_RACE), fill=factor(VIC_RACE))) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start=0) +
+  facet_grid(.~ factor(OCCUR_DATE_YEAR)) +theme_void() + 
+  labs(title = "Multiple Pie Chart- Yearwise  Death Count" )
+
+# Interactive Tooltip(Year,Race,IncidentCount,DeathCount) using GGplot and giraph for better visualization and and more interactive - Incident Year wise(X column).
+gg_point_year = ggplot(data = shoot_historic_by_VIC_RACE_YEAR) +
+    geom_point_interactive(aes(x = factor(OCCUR_DATE_YEAR), y = DEATH_COUNT, colour=factor(DEATH_COUNT),
+    , tooltip = TOOL_TIP_COLS, data_id = factor(OCCUR_DATE_YEAR))) + 
+  labs(title = "Interactive- Yearwise  Death Count" )
+
+girafe(ggobj = gg_point_year  , width_svg = 10, height_svg = 5)
+
+# Interactive Tooltip(Year,Race,IncidentCount,DeathCount) using GGplot and giraph for better visualization and and more interactive - Victim Race wise(X column).
+gg_point_vic_race = ggplot(data = shoot_historic_by_VIC_RACE_YEAR) +
+    geom_point_interactive(aes(x = factor(VIC_RACE), y = DEATH_COUNT, 
+                               colour=factor(DEATH_COUNT),
+    , tooltip = TOOL_TIP_COLS , data_id = factor(VIC_RACE))) + 
+  labs(title = "Interactive- Victim Race Death Count" )
+
+girafe(ggobj = gg_point_vic_race , width_svg = 10, height_svg = 5)
+
+#summary(shoot_historic)
+#head(shoot_historic , 5)
+#data.table(shoot_historic)
+#spec(shoot_historic)
+
+```
+
+**Top 5 Incidents happened in a day / Maximum shooting incidents in a day :**  
+```{r}
+
+#shoot_historic_By_Date
+# sort dataframe by column in r
+# select top N results
+shoot_historic_By_Date_TOP_5_Incidents <- shoot_historic_By_Date[order(-shoot_historic_By_Date$INCIDENT_COUNT),][1:5,]
+
+shoot_historic_By_Date_TOP_5_Incidents
+
+shoot_historic_By_Date_TOP_Incidents <- shoot_historic_By_Date_TOP_5_Incidents[1,]
+
+shoot_historic_By_Date_TOP_Incidents
+
+# Maximum Incidents in a day 
+max(shoot_historic_By_Date_TOP_Incidents$INCIDENT_COUNT) 
+# Maximum Incidents day - date  
+max(shoot_historic_By_Date_TOP_Incidents$OCCUR_DATE) 
+```
+**Top 5 Deaths happened in a day / Maximum Deaths in a day :**  
+```{r}
+# sort dataframe by column in r
+# select top N results
+shoot_historic_By_Date_TOP_5_Deaths <- shoot_historic_By_Date[order(-shoot_historic_By_Date$DEATH_COUNT),][1:5,]
+
+shoot_historic_By_Date_TOP_5_Deaths
+
+shoot_historic_By_Date_TOP_Deaths_In_Day <- shoot_historic_By_Date_TOP_5_Deaths[1,]
+
+shoot_historic_By_Date_TOP_Deaths_In_Day
+
+# Maximum Deaths in a day 
+max(shoot_historic_By_Date_TOP_Deaths_In_Day$DEATH_COUNT) 
+# Maximum Deaths day - date  
+max(shoot_historic_By_Date_TOP_Deaths_In_Day$OCCUR_DATE) 
+
+max(shoot_historic_By_Date$DEATH_COUNT)
+```
+**Maximum shooting incidents in a year: **  
+```{r}
+max(shoot_historic_By_Date_Year$INCIDENT_COUNT)
+```
+**Maximum death incidents in a year:**  
+```{r}
+max(shoot_historic_By_Date_Year$DEATH_COUNT)
+
+summary(shoot_historic_By_Date)
+#head(shoot_historic_By_Date , 5)
+#data.table(shoot_historic_By_Date)
+#spec(shoot_historic_By_Date)
+
+shoot_historic_By_Date_all <- shoot_historic %>%
+    group_by (JURISDICTION_CODE)  %>%  
+    summarize( INCIDENT_COUNT = sum(INCIDENT_COUNT) ) %>%
+    select (JURISDICTION_CODE, INCIDENT_COUNT )
+
+shoot_historic_By_JURISDICTION_CODE_Date_All <- shoot_historic %>%
+   group_by(JURISDICTION_CODE,OCCUR_DATE)  %>%
+   summarize(INCIDENT_COUNT = sum(INCIDENT_COUNT),
+             DEATH_COUNT = sum(DEATH_COUNT) ) %>%
+   select (OCCUR_DATE, JURISDICTION_CODE, INCIDENT_COUNT, DEATH_COUNT)  %>%
+   ungroup()
+
+shoot_historic_By_BORO_Date_All <- shoot_historic %>%
+   group_by(BORO,OCCUR_DATE)  %>%
+   summarize(INCIDENT_COUNT = sum(INCIDENT_COUNT),
+             DEATH_COUNT = sum(DEATH_COUNT) ) %>%
+   select (OCCUR_DATE, BORO, INCIDENT_COUNT, DEATH_COUNT)  %>%
+   ungroup()
+
+```
+
+# 4. Model:
+I am using Linear Regression model. This model(lm) command takes the dataset in the following format:  
+
+lm([target variable] ~ [predictor variables], data = [data-source])
+
+```{r}
+
+## Modeling Data:
+
+mod <- lm(DEATH_COUNT ~ INCIDENT_COUNT, data = shoot_historic_By_BORO_Date_All)
+
+summary(mod)
+
+shoot_historic_By_BORO_Date_All %>% slice_min(INCIDENT_COUNT)
+
+NYPD_tot_w_pred <- shoot_historic_By_BORO_Date_All %>%
+  mutate(pred = predict(mod))
+
+NYPD_tot_w_pred
+summary(NYPD_tot_w_pred)
+
+NYPD_tot_w_pred %>% ggplot() +
+ geom_point(aes(x = INCIDENT_COUNT, y = DEATH_COUNT), color = "blue") +
+ geom_point(aes(x = INCIDENT_COUNT, y = pred), color = "red")
+
+```
+
+**Model Performance and Coefficients:**  
+    From the model performance above, we can see the values of the intercept (“a” value) and the slope (“b” value) for the year. These “a” and “b” values plot a line between all the points of the data. So in this case, if there is a incident count is 100, a is -0.137959 and b is 0.256956, the model predicts (on average)  around (-0.137959 + (0.256956 * 100)) = ~26 deaths can happen.
+It might be possible to get better model performance by considering other features inflation, job market, financial market, political, wealth-related information, and many more related to these geographical areas. In this way, we can predict a much better crime/death rate and improve model performance much better as well.
+
+# 5. Bias:
+  There is a possibility of some types of biases in the NYPD Shooting dataset. By removing or reducing them it's highly possible to predict better test results close to training data and the model can eventually perform better.  
+
+With that said, it is important to monitor the data preparation processes closely to make sure the datasets are as bias-free as possible before they are used in the training phase.  
+
+**Selection Bias:** This seems like not an issue as this data is from NYPD  
+**Overfitting and Underfitting:** When a model gets trained with large amounts of data, it also starts learning from the noise and inaccurate data entries in the dataset. Consequently, the model does not categorize the data correctly, because of too many details and noise. In this data set, lat lang or many other features can cause noise but can be reduced.  
+
+**Exclusion Bias:** It's possible excluding some features can cause higher bias and this can be reduced including some features that can reduce bias like climate and economic situations and political situations, and inflation and seasons can be included to get more accurate model performance.
+
+# Conclusion:
+  To conclude, I have done the Visualizations, Data analyzing and Modeling using the NYPD shooting incident dataset. I have provided summary below:  
+
+1. **Shooting Incidents by Jurisdiction.**  
+    + Summarizing shoot historic  
+2. **Visualization and Analysis of NYPD Shooting Incidents data.**  
+    + Visualizing NYPD Shoot Incidents and Deaths
+      + Visualizing NYPD Shoot Incidents by Jurisdiction - Pie/Coxcomb/Bar chart
+      + Visualizing NYPD Shoot Incidents by Yearly - Bar/Scatter/Pie/Coxcomb
+      + Visualizing NYPD Death by Yearly - Bar/Scatter/Pie/Coxcomb/Multiple-Pie/Interactive chart
+    + Maximum shooting incidents by date wise : 47 on 2020-07-05
+    + Maximum death incidents by date wise : 12 on 2020-07-26
+    + Maximum shooting incidents by yearly : 2055
+    + Maximum death incidents by yearly : 445
+    
+3. **Linear Regression Model prediction**
+    + Model predicts ~26 deaths for 100 shooting incidents.
+    + LM model prediction plot for visually understand better.
+    
+4. **Bias information**
+    + By adding much other information and features like inflation, job market, financial market, wealth-related information and many more related to these geographical areas we can predict a much better crime/death rate and improve model performance much better.
+
+
