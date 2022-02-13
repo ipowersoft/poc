@@ -3,8 +3,8 @@ title: "NYPD shooting incident data - Analyze / Visualize / Model "
 author: "Kothandaraman Sikamani"
 date: "12/02/2022"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 always_allow_html: true
 ---
 

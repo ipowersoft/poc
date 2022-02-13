@@ -3,8 +3,8 @@ title: "Covid-19 Data - Analyze / Visualize / Model "
 author: "Kothandaraman Sikamani"
 date: "12/02/2022"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 editor_options: 
   chunk_output_type: console
 ---
